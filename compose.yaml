@@ -1,0 +1,60 @@
+services:
+  mysql1:
+    image: docker.io/library/mysql:9.7
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example1
+      MYSQL_DATABASE: db1
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql1_data:/var/lib/mysql
+
+  mysql2:
+    image: docker.io/library/mysql:9.7
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example2
+      MYSQL_DATABASE: db2
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql2_data:/var/lib/mysql
+
+  mysql3:
+    image: docker.io/library/mysql:9.7
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example3
+      MYSQL_DATABASE: db3
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql3_data:/var/lib/mysql
+
+  kafka:
+    image: docker.io/apache/kafka:latest
+    restart: always
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+volumes:
+  mysql1_data:
+  mysql2_data:
+  mysql3_data:
+  kafka_data:
