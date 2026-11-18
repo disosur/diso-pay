@@ -1,0 +1,39 @@
+meta {
+  name: Create Checkout Session
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/checkout/sessions
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "currency": "PHP",
+    "success_url": "https://example.com/checkout/success",
+    "cancel_url": "https://example.com/checkout/cancel",
+    "payment_methods": ["gcash", "maya"],
+    "customer_reference_id": "order_0001",
+    "description": "Order order_0001",
+    "line_items": [
+      {
+        "name": "Hello",
+        "amount": 50000,
+        "quantity": 1
+      }
+    ],
+    "metadata": {
+      "order_id": "order_0001"
+    }
+  }
+}
+
+tests {
+  test("creates a checkout session", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().url).to.be.a("string");
+  });
+}

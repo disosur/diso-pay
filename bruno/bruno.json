@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "name": "diso-pay",
+  "type": "collection",
+  "ignore": ["node_modules", ".git"]
+}
