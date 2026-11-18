@@ -1,0 +1,40 @@
+meta {
+  name: Create Payment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/payment/process
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "currency": "PHP",
+    "success_url": "https://example.com/checkout/success",
+    "cancel_url": "https://example.com/checkout/cancel",
+    "customer_reference_id": "order_0012",
+    "description": "Order order_0012",
+    "line_items": [
+      {
+        "name": "Hello",
+        "amount": 50000,
+        "quantity": 1
+      }
+    ],
+    "metadata": {
+      "order_id": "order_0012"
+    }
+  }
+}
+
+tests {
+  test("creates a transaction", function () {
+    expect([200, 201]).to.include(res.getStatus());
+    expect(res.getBody().url).to.be.a("string");
+    expect(res.getBody().status).to.equal("pending");
+    bru.setVar("transactionId", res.getBody().id);
+  });
+}

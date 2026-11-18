@@ -1,0 +1,19 @@
+{
+  "name": "@diso-pay/payment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "bun check"
+  },
+  "dependencies": {
+    "@diso-pay/contracts": "workspace:*",
+    "@diso-pay/grpc": "workspace:*",
+    "@diso-pay/logger": "workspace:*",
+    "hono": "^4.13.19",
+    "stripe": "^23.1.0",
+    "zod": "^4.6.7"
+  }
+}

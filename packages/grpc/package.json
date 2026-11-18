@@ -1,0 +1,17 @@
+{
+  "name": "@diso-pay/grpc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check"
+  },
+  "dependencies": {
+    "@diso-pay/logger": "workspace:*",
+    "@grpc/grpc-js": "^1.14.7",
+    "protobufjs": "^7.4.0"
+  }
+}

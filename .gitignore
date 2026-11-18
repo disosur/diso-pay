@@ -4,7 +4,15 @@ node_modules
 # output
 out
 dist
+.output
+.nitro
+.tanstack
+.vinxi
 *.tgz
+
+# local ledger database
+apps/ledger/data/*.sqlite
+apps/ledger/data/*.sqlite-*
 
 # code coverage
 coverage
@@ -17,10 +25,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # dotenv environment variable files
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+!.env.example
+!.env.*.example
 
 # caches
 .eslintcache
