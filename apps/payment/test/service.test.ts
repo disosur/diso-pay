@@ -23,7 +23,9 @@ const config: PaymentConfig = {
   fxPhpPerUsd: 58,
   transactionTtlSeconds: 1_800,
   stripeSecretKey: "",
+  stripeWebhookSecret: "",
   payrexSecretKey: "sk_test",
+  payrexWebhookSecret: "",
   payrexApiBaseUrl: "https://api.payrexhq.com",
 };
 

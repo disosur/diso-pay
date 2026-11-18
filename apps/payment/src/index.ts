@@ -7,6 +7,7 @@ import { createLedgerClient } from "./ledger-client.ts";
 import { log } from "./logger.ts";
 import { createProviderRegistry } from "./providers/index.ts";
 import { createPaymentService } from "./service.ts";
+import { createWebhookRoutes } from "./webhooks.ts";
 
 const config = loadConfig();
 const ledger = createLedgerClient(config.ledgerAddress);
@@ -40,8 +41,14 @@ app.get("/health", (c) =>
       stripe: config.stripeSecretKey.length > 0,
       payrex: config.payrexSecretKey.length > 0,
     },
+    webhooks: {
+      stripe: config.stripeWebhookSecret.length > 0,
+      payrex: config.payrexWebhookSecret.length > 0,
+    },
   }),
 );
+
+app.route("/", createWebhookRoutes(config));
 
 const httpServer = Bun.serve({
   port: config.httpPort,
@@ -56,7 +63,9 @@ log.info("payment service ready", {
   return_base: config.checkoutReturnBaseUrl || "loopback fallback",
   fx_php_per_usd: config.fxPhpPerUsd,
   stripe_key_present: config.stripeSecretKey.length > 0,
+  stripe_webhook_secret_present: config.stripeWebhookSecret.length > 0,
   payrex_key_present: config.payrexSecretKey.length > 0,
+  payrex_webhook_secret_present: config.payrexWebhookSecret.length > 0,
 });
 
 let shuttingDown = false;

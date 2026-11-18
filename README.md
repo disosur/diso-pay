@@ -174,6 +174,40 @@ merchant's `success_url` or `cancel_url`.
 > `CHECKOUT_RETURN_BASE_URL=https://your-tunnel` in `apps/payment/.env`. LAN
 > addresses such as `http://192.168.1.5:3000` also work for PayRex.
 
+## Webhooks
+
+The payment service accepts provider webhooks and prints every payload to the
+console. Nothing is written to the ledger yet, so these endpoints are only for
+inspecting what Stripe and PayRex send.
+
+| Provider | Endpoint                            | Signing secret          |
+| -------- | ----------------------------------- | ----------------------- |
+| Stripe   | `POST http://localhost:4012/webhooks/stripe` | `STRIPE_WEBHOOK_SECRET` |
+| PayRex   | `POST http://localhost:4012/webhooks/payrex` | `PAYREX_WEBHOOK_SECRET` |
+
+Signatures are verified before a payload is logged:
+
+- Stripe uses `Stripe-Signature` with a 5 minute tolerance.
+- PayRex uses `Payrex-Signature` (`t`, `te`, `li`) with a 5 minute tolerance.
+  The signature covers the raw body, so the service reads the body as text and
+  never parses it first.
+
+If a secret is not set, the service logs a warning and accepts the payload
+without verification. Requests with a bad signature get `400`, which tells the
+provider to retry; valid ones get `200`.
+
+Local Stripe:
+
+```sh
+stripe listen --forward-to localhost:4012/webhooks/stripe
+# copy the whsec_… it prints into apps/payment/.env
+```
+
+PayRex requires a public HTTPS URL, so expose the payment service with a tunnel
+and register `https://your-tunnel/webhooks/payrex` in the PayRex dashboard for
+the events you want (`payment_intent.succeeded`, `checkout_session.expired`, …).
+The webhook's `secret_key` (`whsk_…`) goes in `PAYREX_WEBHOOK_SECRET`.
+
 ## Ledger
 
 `apps/ledger` stores one append-only `events` table. A transaction's state is
@@ -252,7 +286,9 @@ CHECKOUT_RETURN_BASE_URL=
 FX_PHP_PER_USD=58
 TRANSACTION_TTL_SECONDS=1800
 STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
 PAYREX_SECRET_API_KEY=
+PAYREX_WEBHOOK_SECRET=
 PAYREX_API_BASE_URL=https://api.payrexhq.com
 ```
 
@@ -277,8 +313,8 @@ TRANSACTION_TTL_SECONDS=1800
 
 ## Not included yet
 
-The provider return redirect is a UX signal, not proof of payment. A signed
-webhook endpoint in the payment service should append the authoritative
+The provider return redirect is a UX signal, not proof of payment. The webhook
+endpoints currently only log payloads; they should append the authoritative
 `payment.succeeded` event before this is used for fulfilment.
 
 `POST /payment/process` is intentionally unauthenticated so the checkout page

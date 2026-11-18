@@ -9,7 +9,9 @@ export type PaymentConfig = {
   fxPhpPerUsd: number;
   transactionTtlSeconds: number;
   stripeSecretKey: string;
+  stripeWebhookSecret: string;
   payrexSecretKey: string;
+  payrexWebhookSecret: string;
   payrexApiBaseUrl: string;
 };
 
@@ -49,7 +51,9 @@ export function loadConfig(): PaymentConfig {
       DEFAULT_TRANSACTION_TTL_SECONDS,
     ),
     stripeSecretKey: envString("STRIPE_SECRET_KEY"),
+    stripeWebhookSecret: envString("STRIPE_WEBHOOK_SECRET"),
     payrexSecretKey: envString("PAYREX_SECRET_API_KEY"),
+    payrexWebhookSecret: envString("PAYREX_WEBHOOK_SECRET"),
     payrexApiBaseUrl: envString(
       "PAYREX_API_BASE_URL",
       "https://api.payrexhq.com",
