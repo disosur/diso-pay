@@ -1,5 +1,4 @@
 export type LedgerConfig = {
-  httpPort: number;
   grpcAddress: string;
   databasePath: string;
 };
@@ -23,7 +22,6 @@ function envNumber(name: string, fallback: number): number {
 
 export function loadConfig(): LedgerConfig {
   return {
-    httpPort: envNumber("PORT", 4011),
     grpcAddress: `${envString("LEDGER_GRPC_HOST", "127.0.0.1")}:${envNumber(
       "LEDGER_GRPC_PORT",
       50051,

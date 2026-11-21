@@ -37,12 +37,13 @@ routing rules) and `packages/grpc` (a tiny typed gRPC runtime).
 
 | Service   | HTTP                | gRPC                    | Env file                |
 | --------- | ------------------- | ----------------------- | ----------------------- |
-| ledger    | `localhost:4011`    | `127.0.0.1:50051`       | `apps/ledger/.env`      |
+| ledger    | —                   | `127.0.0.1:50051`       | `apps/ledger/.env`      |
 | payment   | `localhost:4012`    | `127.0.0.1:50052`       | `apps/payment/.env`     |
 | processor | `localhost:3000`    | —                       | `apps/processor/.env`   |
 
-HTTP ports on `ledger` and `payment` only serve `/health` (plus read-only
-transaction views on the ledger). All service-to-service work happens over gRPC.
+The ledger is gRPC-only. The processor is the public HTTP API; payment serves
+`/health` and the provider webhook endpoints. All service-to-service work
+happens over gRPC.
 
 ## Setup
 
@@ -264,11 +265,9 @@ Derived status: `pending` → `awaiting_payment` → `completed`, or `expired`
 once the deadline passes. Each append can carry an `idempotency_key`; replays
 return the original event with `duplicate: true`.
 
-Read-side HTTP endpoints for debugging:
-
-- `GET /transactions/:id` — folded transaction
-- `GET /transactions/:id/events` — raw event log
-- `GET /transactions?reference=order_0001` — active transaction for a reference
+Reads go through the ledger's gRPC service. The processor exposes the
+merchant-facing status views over HTTP (`GET /payment/:id/status` and
+`GET /orders/:reference/status`); the ledger has no HTTP server.
 
 Reset local data with `rm apps/ledger/data/ledger.sqlite*` and re-run
 `bun run db:migrate`.
@@ -337,7 +336,6 @@ XENDIT_API_BASE_URL=https://api.xendit.co
 `apps/ledger/.env`
 
 ```sh
-PORT=4011
 LEDGER_GRPC_HOST=127.0.0.1
 LEDGER_GRPC_PORT=50051
 LEDGER_DATABASE_PATH=./data/ledger.sqlite
