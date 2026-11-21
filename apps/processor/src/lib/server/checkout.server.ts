@@ -1,4 +1,5 @@
 import {
+  CHECKOUT_OPENED,
   CHECKOUT_RETURNED,
   type CheckoutOptions,
   type CheckoutSessionResponse,
@@ -81,15 +82,40 @@ export async function getCheckoutPageData(
       paymentClient().GetCheckoutOptions({}),
     ]);
 
+    const transaction = transactionResponse.transaction;
+
+    try {
+      const opened = await ledgerClient().AppendEvent({
+        transaction_id: transactionId,
+        type: CHECKOUT_OPENED,
+        payload_json: "{}",
+        idempotency_key: `checkout.opened:${transactionId}`,
+      });
+
+      log.info("checkout opened", {
+        transaction_id: transactionId,
+        status: transaction.status,
+        duplicate: opened.duplicate,
+      });
+    } catch (error) {
+      log.error("checkout opened event failed", {
+        operation: "AppendEvent",
+        transaction_id: transactionId,
+        code: grpcErrorCode(error),
+        message: rpcErrorMessage(error),
+        err: error,
+      });
+    }
+
     log.info("checkout page data", {
       transaction_id: transactionId,
       found: true,
-      status: transactionResponse.transaction.status,
+      status: transaction.status,
     });
 
     return {
       ok: true,
-      transaction: toPublicTransaction(transactionResponse.transaction),
+      transaction: toPublicTransaction(transaction),
       options,
     };
   } catch (error) {

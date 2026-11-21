@@ -1,0 +1,20 @@
+meta {
+  name: Get Transaction Status by Reference
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{ledgerUrl}}/transactions/by-reference/{{orderId}}/status
+  body: none
+  auth: none
+}
+
+tests {
+  test("resolves the latest transaction for the merchant reference", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().transaction.id).to.equal(bru.getVar("transactionId"));
+    expect(res.getBody().transaction.reference).to.equal(bru.getVar("orderId"));
+    expect(res.getBody().status_history).to.be.an("array").that.is.not.empty;
+  });
+}

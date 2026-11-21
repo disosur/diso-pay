@@ -68,6 +68,7 @@ Useful commands:
 bun test             # contract, routing, and gRPC round-trip tests
 bun run typecheck    # bun check in every workspace package
 bun run db:generate  # regenerate drizzle migrations after changing the schema
+bun run db:studio    # open Drizzle Studio at https://local.drizzle.studio
 bun run build        # build the processor
 ```
 
@@ -236,13 +237,14 @@ webhook settings. Copy the callback verification token from that page into
 `apps/ledger` stores one append-only `events` table. A transaction's state is
 computed by folding its events in order; nothing is ever updated in place.
 
-| Event type                 | Written by | Meaning                              |
-| -------------------------- | ---------- | ------------------------------------ |
-| `transaction.created`      | processor  | line items, currency, return URLs    |
-| `checkout.session_created` | payment    | provider session + hosted URL        |
-| `checkout.session_reused`  | payment    | an existing live session was reused  |
-| `checkout.returned`        | processor  | provider sent the customer back      |
-| `payment.succeeded`        | payment    | provider confirmed the payment       |
+| Event type                 | Written by | Meaning                                                           |
+| -------------------------- | ---------- | ----------------------------------------------------------------- |
+| `transaction.created`      | processor  | line items, currency, return URLs                                 |
+| `checkout.opened`          | processor  | customer opened the checkout link (recorded once per transaction) |
+| `checkout.session_created` | payment    | provider session + hosted URL                                     |
+| `checkout.session_reused`  | payment    | an existing live session was reused                               |
+| `checkout.returned`        | processor  | provider sent the customer back                                   |
+| `payment.succeeded`        | payment    | provider confirmed the payment                                    |
 
 Derived status: `pending` → `awaiting_payment` → `completed`, or `expired`
 once the deadline passes. Each append can carry an `idempotency_key`; replays
@@ -252,6 +254,11 @@ Read-side HTTP endpoints for debugging:
 
 - `GET /transactions/:id` — folded transaction
 - `GET /transactions/:id/events` — raw event log
+- `GET /transactions/:id/status` — folded transaction plus a `status_history`
+  array (one entry per event, with the status after that event; expired
+  transactions get a derived `transaction.expired` entry)
+- `GET /transactions/by-reference/:reference/status` — same payload for the
+  latest transaction with that merchant reference
 - `GET /transactions?reference=order_0001` — active transaction for a reference
 
 Reset local data with `rm apps/ledger/data/ledger.sqlite*` and re-run

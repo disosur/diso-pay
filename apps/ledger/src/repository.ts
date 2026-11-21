@@ -119,12 +119,11 @@ export function getTransaction(
   return foldTransaction(listEvents(db, transactionId), now);
 }
 
-export function findActiveTransaction(
+function transactionIdsForReference(
   db: LedgerDatabase,
   reference: string,
-  now = Date.now(),
-): Transaction | null {
-  const rows = db
+): string[] {
+  return db
     .select({ transactionId: events.transactionId })
     .from(events)
     .where(
@@ -134,7 +133,29 @@ export function findActiveTransaction(
       ),
     )
     .orderBy(desc(events.id))
-    .all();
+    .all()
+    .map((row) => row.transactionId);
+}
+
+export function findTransactionByReference(
+  db: LedgerDatabase,
+  reference: string,
+  now = Date.now(),
+): Transaction | null {
+  const transactionId = transactionIdsForReference(db, reference)[0];
+  if (!transactionId) return null;
+
+  return getTransaction(db, transactionId, now);
+}
+
+export function findActiveTransaction(
+  db: LedgerDatabase,
+  reference: string,
+  now = Date.now(),
+): Transaction | null {
+  const rows = transactionIdsForReference(db, reference).map((transactionId) => ({
+    transactionId,
+  }));
 
   const seen = new Set<string>();
 

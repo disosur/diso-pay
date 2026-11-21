@@ -11,6 +11,7 @@ import type {
 } from "./types.ts";
 
 export const TRANSACTION_CREATED = "transaction.created";
+export const CHECKOUT_OPENED = "checkout.opened";
 export const CHECKOUT_SESSION_CREATED = "checkout.session_created";
 export const CHECKOUT_SESSION_REUSED = "checkout.session_reused";
 export const CHECKOUT_RETURNED = "checkout.returned";
