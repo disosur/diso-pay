@@ -20,7 +20,7 @@ export type StatusHistoryEntry = {
   status: TransactionStatus;
   created_at: number;
   at: string;
-  payload: unknown;
+  payload?: unknown;
   derived?: boolean;
 };
 
@@ -49,12 +49,23 @@ function parseEventPayload(json: string): unknown {
   }
 }
 
+function isEmptyPayload(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+
+  return typeof value === "string" ? value.length === 0 : false;
+}
+
 function buildStatusHistory(
   events: LedgerEvent[],
   transaction: Transaction,
 ): StatusHistoryEntry[] {
   const history: StatusHistoryEntry[] = events.map((event, index) => {
     const folded = foldTransaction(events.slice(0, index + 1), event.created_at);
+    const payload = parseEventPayload(event.payload_json);
 
     return {
       sequence: event.sequence,
@@ -62,7 +73,7 @@ function buildStatusHistory(
       status: folded?.status ?? transaction.status,
       created_at: event.created_at,
       at: new Date(event.created_at).toISOString(),
-      payload: parseEventPayload(event.payload_json),
+      ...(isEmptyPayload(payload) ? {} : { payload }),
     };
   });
 
@@ -78,7 +89,6 @@ function buildStatusHistory(
       status: "expired",
       created_at: transaction.expires_at,
       at: new Date(transaction.expires_at).toISOString(),
-      payload: null,
       derived: true,
     });
   }
