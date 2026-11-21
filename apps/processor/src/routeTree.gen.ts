@@ -13,7 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as PaymentTransactionIdRouteImport } from './routes/payment/$transactionId'
 import { Route as PaymentProcessRouteImport } from './routes/payment/process'
+import { Route as OrdersReferenceStatusRouteImport } from './routes/orders/$reference.status'
 import { Route as PaymentTransactionIdReturnRouteImport } from './routes/payment/$transactionId.return'
+import { Route as PaymentTransactionIdStatusRouteImport } from './routes/payment/$transactionId.status'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,10 +37,21 @@ const PaymentProcessRoute = PaymentProcessRouteImport.update({
   path: '/payment/process',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrdersReferenceStatusRoute = OrdersReferenceStatusRouteImport.update({
+  id: '/orders/$reference/status',
+  path: '/orders/$reference/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PaymentTransactionIdReturnRoute =
   PaymentTransactionIdReturnRouteImport.update({
     id: '/return',
     path: '/return',
+    getParentRoute: () => PaymentTransactionIdRoute,
+  } as any)
+const PaymentTransactionIdStatusRoute =
+  PaymentTransactionIdStatusRouteImport.update({
+    id: '/status',
+    path: '/status',
     getParentRoute: () => PaymentTransactionIdRoute,
   } as any)
 
@@ -47,14 +60,18 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/payment/$transactionId': typeof PaymentTransactionIdRouteWithChildren
   '/payment/process': typeof PaymentProcessRoute
+  '/orders/$reference/status': typeof OrdersReferenceStatusRoute
   '/payment/$transactionId/return': typeof PaymentTransactionIdReturnRoute
+  '/payment/$transactionId/status': typeof PaymentTransactionIdStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/payment/$transactionId': typeof PaymentTransactionIdRouteWithChildren
   '/payment/process': typeof PaymentProcessRoute
+  '/orders/$reference/status': typeof OrdersReferenceStatusRoute
   '/payment/$transactionId/return': typeof PaymentTransactionIdReturnRoute
+  '/payment/$transactionId/status': typeof PaymentTransactionIdStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,7 +79,9 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/payment/$transactionId': typeof PaymentTransactionIdRouteWithChildren
   '/payment/process': typeof PaymentProcessRoute
+  '/orders/$reference/status': typeof OrdersReferenceStatusRoute
   '/payment/$transactionId/return': typeof PaymentTransactionIdReturnRoute
+  '/payment/$transactionId/status': typeof PaymentTransactionIdStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -71,21 +90,27 @@ export interface FileRouteTypes {
     | '/health'
     | '/payment/$transactionId'
     | '/payment/process'
+    | '/orders/$reference/status'
     | '/payment/$transactionId/return'
+    | '/payment/$transactionId/status'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/health'
     | '/payment/$transactionId'
     | '/payment/process'
+    | '/orders/$reference/status'
     | '/payment/$transactionId/return'
+    | '/payment/$transactionId/status'
   id:
     | '__root__'
     | '/'
     | '/health'
     | '/payment/$transactionId'
     | '/payment/process'
+    | '/orders/$reference/status'
     | '/payment/$transactionId/return'
+    | '/payment/$transactionId/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -93,6 +118,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   PaymentTransactionIdRoute: typeof PaymentTransactionIdRouteWithChildren
   PaymentProcessRoute: typeof PaymentProcessRoute
+  OrdersReferenceStatusRoute: typeof OrdersReferenceStatusRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -125,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaymentProcessRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/orders/$reference/status': {
+      id: '/orders/$reference/status'
+      path: '/orders/$reference/status'
+      fullPath: '/orders/$reference/status'
+      preLoaderRoute: typeof OrdersReferenceStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/payment/$transactionId/return': {
       id: '/payment/$transactionId/return'
       path: '/return'
@@ -132,15 +165,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaymentTransactionIdReturnRouteImport
       parentRoute: typeof PaymentTransactionIdRoute
     }
+    '/payment/$transactionId/status': {
+      id: '/payment/$transactionId/status'
+      path: '/status'
+      fullPath: '/payment/$transactionId/status'
+      preLoaderRoute: typeof PaymentTransactionIdStatusRouteImport
+      parentRoute: typeof PaymentTransactionIdRoute
+    }
   }
 }
 
 interface PaymentTransactionIdRouteChildren {
   PaymentTransactionIdReturnRoute: typeof PaymentTransactionIdReturnRoute
+  PaymentTransactionIdStatusRoute: typeof PaymentTransactionIdStatusRoute
 }
 
 const PaymentTransactionIdRouteChildren: PaymentTransactionIdRouteChildren = {
   PaymentTransactionIdReturnRoute: PaymentTransactionIdReturnRoute,
+  PaymentTransactionIdStatusRoute: PaymentTransactionIdStatusRoute,
 }
 
 const PaymentTransactionIdRouteWithChildren =
@@ -151,6 +193,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   PaymentTransactionIdRoute: PaymentTransactionIdRouteWithChildren,
   PaymentProcessRoute: PaymentProcessRoute,
+  OrdersReferenceStatusRoute: OrdersReferenceStatusRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

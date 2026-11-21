@@ -75,6 +75,16 @@ test("ledger gRPC round trip", async () => {
     const active = await client.FindActiveTransaction({ reference: "order_roundtrip" });
     expect(active.transaction?.id).toBe(TRANSACTION_ID);
 
+    const byReference = await client.FindTransactionByReference({
+      reference: "order_roundtrip",
+    });
+    expect(byReference.transaction?.id).toBe(TRANSACTION_ID);
+
+    const missingReference = await client.FindTransactionByReference({
+      reference: "order_missing",
+    });
+    expect(missingReference.transaction).toBeNull();
+
     await client.AppendEvent({
       transaction_id: TRANSACTION_ID,
       type: CHECKOUT_SESSION_CREATED,

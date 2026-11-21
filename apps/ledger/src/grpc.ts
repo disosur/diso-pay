@@ -3,6 +3,7 @@ import {
   TRANSACTION_CREATED,
   type AppendEventRequest,
   type FindActiveTransactionRequest,
+  type FindTransactionByReferenceRequest,
   type GetTransactionRequest,
   type ListEventsRequest,
 } from "@diso-pay/contracts";
@@ -20,6 +21,7 @@ import {
   countEvents,
   findActiveTransaction,
   findEventByIdempotencyKey,
+  findTransactionByReference,
   getTransaction,
   listEvents,
 } from "./repository.ts";
@@ -189,6 +191,21 @@ export function createLedgerHandlers(
       (request, result) => ({
         reference: stringField(request?.reference),
         found: result?.transaction != null,
+      }),
+    ),
+
+    FindTransactionByReference: wrapCall(
+      "FindTransactionByReference",
+      (request: FindTransactionByReferenceRequest) => {
+        const reference = requireString(request.reference, "reference");
+        const transaction = findTransactionByReference(db, reference);
+
+        return { transaction };
+      },
+      (request, result) => ({
+        reference: stringField(request?.reference),
+        found: result?.transaction != null,
+        status: result?.transaction?.status,
       }),
     ),
 

@@ -189,6 +189,20 @@ merchant's `success_url` or `cancel_url`.
 > To keep return tracking, expose the processor with a tunnel and set
 > `CHECKOUT_RETURN_BASE_URL=https://your-tunnel` in `apps/payment/.env`.
 
+### Payment status
+
+Poll the current state of an order or transaction through the processor:
+
+- `GET /payment/:id/status` — by transaction id
+- `GET /orders/:reference/status` — latest transaction for a merchant reference
+
+Both read the ledger over gRPC (`GetTransaction` or
+`FindTransactionByReference`, plus `ListEvents`) and return the folded
+transaction with a `status_history` array: one entry per event, with the status
+after that event. Expired transactions get a derived `transaction.expired`
+entry. The routes return `404` when nothing matches and `503` when the ledger is
+unreachable.
+
 ## Webhooks
 
 The payment service accepts provider webhooks, prints every payload to the
@@ -254,11 +268,6 @@ Read-side HTTP endpoints for debugging:
 
 - `GET /transactions/:id` — folded transaction
 - `GET /transactions/:id/events` — raw event log
-- `GET /transactions/:id/status` — folded transaction plus a `status_history`
-  array (one entry per event, with the status after that event; expired
-  transactions get a derived `transaction.expired` entry)
-- `GET /transactions/by-reference/:reference/status` — same payload for the
-  latest transaction with that merchant reference
 - `GET /transactions?reference=order_0001` — active transaction for a reference
 
 Reset local data with `rm apps/ledger/data/ledger.sqlite*` and re-run
@@ -273,7 +282,7 @@ builds without copying `.proto` files around. `packages/grpc` compiles them with
 
 - `PaymentService.CreateCheckoutSession` — `{ transaction_id, method, currency }`
 - `PaymentService.GetCheckoutOptions` — methods, currencies, FX rate, default TTL
-- `LedgerService.AppendEvent` / `GetTransaction` / `FindActiveTransaction` / `ListEvents`
+- `LedgerService.AppendEvent` / `GetTransaction` / `FindActiveTransaction` / `FindTransactionByReference` / `ListEvents`
 
 Business errors travel as gRPC status codes and become HTTP codes in the
 processor: `NOT_FOUND` → 404, `INVALID_ARGUMENT` → 400,

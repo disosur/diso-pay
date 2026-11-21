@@ -79,6 +79,14 @@ message FindActiveTransactionResponse {
   Transaction transaction = 1;
 }
 
+message FindTransactionByReferenceRequest {
+  string reference = 1;
+}
+
+message FindTransactionByReferenceResponse {
+  Transaction transaction = 1;
+}
+
 message ListEventsRequest {
   string transaction_id = 1;
 }
@@ -91,6 +99,7 @@ service LedgerService {
   rpc AppendEvent(AppendEventRequest) returns (AppendEventResponse);
   rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
   rpc FindActiveTransaction(FindActiveTransactionRequest) returns (FindActiveTransactionResponse);
+  rpc FindTransactionByReference(FindTransactionByReferenceRequest) returns (FindTransactionByReferenceResponse);
   rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
 }
 `;

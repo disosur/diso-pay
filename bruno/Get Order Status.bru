@@ -1,11 +1,11 @@
 meta {
-  name: Get Transaction Status by Reference
+  name: Get Order Status
   type: http
   seq: 7
 }
 
 get {
-  url: {{ledgerUrl}}/transactions/by-reference/{{orderId}}/status
+  url: {{baseUrl}}/orders/{{orderId}}/status
   body: none
   auth: none
 }

@@ -1,11 +1,11 @@
 meta {
-  name: Get Transaction Status
+  name: Get Payment Status
   type: http
   seq: 6
 }
 
 get {
-  url: {{ledgerUrl}}/transactions/{{transactionId}}/status
+  url: {{baseUrl}}/payment/{{transactionId}}/status
   body: none
   auth: none
 }

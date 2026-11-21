@@ -41,7 +41,7 @@ export type StartedSession = {
   reused: boolean;
 };
 
-function toPublicTransaction(transaction: Transaction): PublicTransaction {
+export function toPublicTransaction(transaction: Transaction): PublicTransaction {
   return {
     id: transaction.id,
     status: transaction.status,

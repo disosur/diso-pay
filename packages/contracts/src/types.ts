@@ -99,6 +99,8 @@ export type GetTransactionRequest = { transaction_id: string };
 export type GetTransactionResponse = { transaction: Transaction };
 export type FindActiveTransactionRequest = { reference: string };
 export type FindActiveTransactionResponse = { transaction: Transaction | null };
+export type FindTransactionByReferenceRequest = { reference: string };
+export type FindTransactionByReferenceResponse = { transaction: Transaction | null };
 export type ListEventsRequest = { transaction_id: string };
 export type ListEventsResponse = { events: LedgerEvent[] };
 
@@ -126,6 +128,9 @@ export type LedgerClient = {
   FindActiveTransaction(
     req: FindActiveTransactionRequest,
   ): Promise<FindActiveTransactionResponse>;
+  FindTransactionByReference(
+    req: FindTransactionByReferenceRequest,
+  ): Promise<FindTransactionByReferenceResponse>;
   ListEvents(req: ListEventsRequest): Promise<ListEventsResponse>;
 };
 
