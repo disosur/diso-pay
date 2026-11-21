@@ -17,5 +17,7 @@ tests {
     expect(res.getBody().transaction.status).to.be.a("string");
     expect(res.getBody().status_history).to.be.an("array").that.is.not.empty;
     expect(res.getBody().status_history[0].type).to.equal("transaction.created");
+    expect(res.getBody().status_history[0].payload).to.be.an("object");
+    expect(res.getBody().status_history[0].payload.currency).to.be.a("string");
   });
 }

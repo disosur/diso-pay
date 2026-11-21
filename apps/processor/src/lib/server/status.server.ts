@@ -20,6 +20,7 @@ export type StatusHistoryEntry = {
   status: TransactionStatus;
   created_at: number;
   at: string;
+  payload: unknown;
   derived?: boolean;
 };
 
@@ -40,6 +41,14 @@ function grpcErrorCode(error: unknown): string {
   return "UNKNOWN";
 }
 
+function parseEventPayload(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 function buildStatusHistory(
   events: LedgerEvent[],
   transaction: Transaction,
@@ -53,6 +62,7 @@ function buildStatusHistory(
       status: folded?.status ?? transaction.status,
       created_at: event.created_at,
       at: new Date(event.created_at).toISOString(),
+      payload: parseEventPayload(event.payload_json),
     };
   });
 
@@ -68,6 +78,7 @@ function buildStatusHistory(
       status: "expired",
       created_at: transaction.expires_at,
       at: new Date(transaction.expires_at).toISOString(),
+      payload: null,
       derived: true,
     });
   }
