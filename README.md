@@ -200,9 +200,11 @@ Poll the current state of an order or transaction through the processor:
 Both read the ledger over gRPC (`GetTransaction` or
 `FindTransactionByReference`, plus `ListEvents`) and return the folded
 transaction with a `status_history` array: one entry per event, with the status
-after that event and the event's parsed `payload` when it isn't empty. Expired
-transactions get a derived `transaction.expired` entry. The routes return `404`
-when nothing matches and `503` when the ledger is unreachable.
+after that event and the event's parsed `payload` when it isn't empty. The
+transaction also carries its checkout `url` (built from `PUBLIC_ORIGIN`, falling
+back to the request origin). Expired transactions get a derived
+`transaction.expired` entry. The routes return `404` when nothing matches and
+`503` when the ledger is unreachable.
 
 ## Webhooks
 

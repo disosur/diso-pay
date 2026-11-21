@@ -11,6 +11,7 @@ import {
   statusName,
 } from "@diso-pay/grpc";
 import { toPublicTransaction, type PublicTransaction } from "./checkout.server.ts";
+import { publicOrigin } from "./config.server.ts";
 import { ledgerClient } from "./grpc.server.ts";
 import { log } from "./logger.server.ts";
 
@@ -24,10 +25,12 @@ export type StatusHistoryEntry = {
   derived?: boolean;
 };
 
+export type StatusTransaction = PublicTransaction & { url: string };
+
 export type TransactionStatusResult =
   | {
       ok: true;
-      transaction: PublicTransaction;
+      transaction: StatusTransaction;
       status_history: StatusHistoryEntry[];
     }
   | { ok: false; reason: "not_found" | "unavailable" };
@@ -114,6 +117,7 @@ function ledgerFailure(
 
 async function loadStatus(
   transaction: Transaction,
+  requestOrigin: string,
   operation: string,
   fields: Record<string, unknown>,
 ): Promise<TransactionStatusResult> {
@@ -137,13 +141,17 @@ async function loadStatus(
 
   return {
     ok: true,
-    transaction: toPublicTransaction(transaction),
+    transaction: {
+      ...toPublicTransaction(transaction),
+      url: `${publicOrigin(requestOrigin)}/payment/${transaction.id}`,
+    },
     status_history: buildStatusHistory(events, transaction),
   };
 }
 
 export async function getTransactionStatus(
   transactionId: string,
+  requestOrigin: string,
 ): Promise<TransactionStatusResult> {
   let transaction: Transaction;
 
@@ -165,13 +173,14 @@ export async function getTransactionStatus(
     });
   }
 
-  return loadStatus(transaction, "GetTransaction", {
+  return loadStatus(transaction, requestOrigin, "GetTransaction", {
     transaction_id: transactionId,
   });
 }
 
 export async function getTransactionStatusByReference(
   reference: string,
+  requestOrigin: string,
 ): Promise<TransactionStatusResult> {
   let transaction: Transaction | null;
 
@@ -188,5 +197,7 @@ export async function getTransactionStatusByReference(
     return { ok: false, reason: "not_found" };
   }
 
-  return loadStatus(transaction, "FindTransactionByReference", { reference });
+  return loadStatus(transaction, requestOrigin, "FindTransactionByReference", {
+    reference,
+  });
 }

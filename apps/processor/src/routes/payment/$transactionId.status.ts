@@ -12,13 +12,16 @@ function failure(error: string, status: number) {
 export const Route = createFileRoute("/payment/$transactionId/status")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ request, params }) => {
         const parsed = transactionIdSchema.safeParse(params.transactionId);
         if (!parsed.success) {
           return failure("invalid_transaction_id", 400);
         }
 
-        const result = await getTransactionStatus(parsed.data);
+        const result = await getTransactionStatus(
+          parsed.data,
+          new URL(request.url).origin,
+        );
         if (!result.ok) {
           return failure(result.reason, result.reason === "not_found" ? 404 : 503);
         }
