@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { PAYMENT_PROTO } from "@diso-pay/contracts";
 import { createGrpcServer, listen, registerService } from "@diso-pay/grpc";
 import { loadConfig } from "./config.ts";
+import { createFxRateProvider } from "./fx.ts";
 import { createPaymentHandlers } from "./grpc.ts";
 import { createLedgerClient } from "./ledger-client.ts";
 import { log } from "./logger.ts";
@@ -12,10 +13,17 @@ import { createWebhookRoutes } from "./webhooks.ts";
 const config = loadConfig();
 const ledger = createLedgerClient(config.ledgerAddress);
 const providers = createProviderRegistry(config);
+const fxRates = createFxRateProvider({
+  stripeSecretKey: config.stripeSecretKey,
+  fallbackPhpPerUsd: config.fxPhpPerUsd,
+  lockDuration: config.fxStripeLockDuration,
+  apiBaseUrl: config.stripeApiBaseUrl,
+});
 const service = createPaymentService({
   config,
   ledger: ledger.client,
   providers,
+  fxRates,
 });
 
 const grpcServer = createGrpcServer();
@@ -39,16 +47,16 @@ app.get("/health", (c) =>
     timestamp: new Date().toISOString(),
     providers: {
       stripe: config.stripeSecretKey.length > 0,
-      payrex: config.payrexSecretKey.length > 0,
+      xendit: config.xenditSecretKey.length > 0,
     },
     webhooks: {
       stripe: config.stripeWebhookSecret.length > 0,
-      payrex: config.payrexWebhookSecret.length > 0,
+      xendit: config.xenditWebhookToken.length > 0,
     },
   }),
 );
 
-app.route("/", createWebhookRoutes(config));
+app.route("/", createWebhookRoutes(config, ledger.client));
 
 const httpServer = Bun.serve({
   port: config.httpPort,
@@ -62,10 +70,11 @@ log.info("payment service ready", {
   processor_public_url: config.processorPublicUrl,
   return_base: config.checkoutReturnBaseUrl || "loopback fallback",
   fx_php_per_usd: config.fxPhpPerUsd,
+  fx_stripe_lock_duration: config.fxStripeLockDuration,
   stripe_key_present: config.stripeSecretKey.length > 0,
   stripe_webhook_secret_present: config.stripeWebhookSecret.length > 0,
-  payrex_key_present: config.payrexSecretKey.length > 0,
-  payrex_webhook_secret_present: config.payrexWebhookSecret.length > 0,
+  xendit_key_present: config.xenditSecretKey.length > 0,
+  xendit_webhook_token_present: config.xenditWebhookToken.length > 0,
 });
 
 let shuttingDown = false;

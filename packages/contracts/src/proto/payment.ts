@@ -36,6 +36,8 @@ message CheckoutOptions {
   repeated string currencies = 2;
   string fx_php_per_usd = 3;
   int64 transaction_ttl_seconds = 4;
+  string fx_rate_source = 5;
+  int64 fx_rate_locked_until = 6;
 }
 
 service PaymentService {

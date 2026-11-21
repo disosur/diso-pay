@@ -20,6 +20,7 @@ import {
 } from "@diso-pay/contracts";
 import { rpcError, status as grpcStatus } from "@diso-pay/grpc";
 import type { PaymentConfig } from "./config.ts";
+import { createFxRateProvider, type FxRateProvider } from "./fx.ts";
 import { log } from "./logger.ts";
 import type { ProviderRegistry } from "./providers/index.ts";
 import { ProviderError } from "./providers/index.ts";
@@ -46,15 +47,16 @@ function isLoopbackHostname(hostname: string): boolean {
   );
 }
 
-function isLoopbackUrl(value: string): boolean {
+function isPublicHttpsUrl(value: string): boolean {
   try {
-    return isLoopbackHostname(new URL(value).hostname);
+    const url = new URL(value);
+    return url.protocol === "https:" && !isLoopbackHostname(url.hostname);
   } catch {
-    return true;
+    return false;
   }
 }
 
-let warnedUntrackedPayrexReturn = false;
+let warnedUntrackedXenditReturn = false;
 
 function providerReturnUrls(
   config: PaymentConfig,
@@ -63,12 +65,12 @@ function providerReturnUrls(
 ): { success_url: string; cancel_url: string; tracked: boolean } {
   const base = config.checkoutReturnBaseUrl || config.processorPublicUrl;
 
-  if (provider === "payrex" && isLoopbackUrl(base)) {
-    if (!warnedUntrackedPayrexReturn) {
-      warnedUntrackedPayrexReturn = true;
-      log.warn("payrex loopback return urls", {
+  if (provider === "xendit" && !isPublicHttpsUrl(base)) {
+    if (!warnedUntrackedXenditReturn) {
+      warnedUntrackedXenditReturn = true;
+      log.warn("xendit loopback return urls", {
         base,
-        reason: "payrex_rejects_loopback_redirect_urls",
+        reason: "xendit_requires_https_return_urls",
         fallback: "merchant_success_cancel_urls",
       });
     }
@@ -108,8 +110,17 @@ export function createPaymentService(input: {
   config: PaymentConfig;
   ledger: LedgerClient;
   providers: ProviderRegistry;
+  fxRates?: FxRateProvider;
 }) {
   const { config, ledger, providers } = input;
+  const fxRates =
+    input.fxRates ??
+    createFxRateProvider({
+      stripeSecretKey: config.stripeSecretKey,
+      fallbackPhpPerUsd: config.fxPhpPerUsd,
+      lockDuration: config.fxStripeLockDuration,
+      apiBaseUrl: config.stripeApiBaseUrl,
+    });
 
   async function loadTransaction(transactionId: string): Promise<Transaction> {
     let response;
@@ -161,10 +172,14 @@ export function createPaymentService(input: {
 
   return {
     async getCheckoutOptions(): Promise<CheckoutOptions> {
+      const fxRate = await fxRates.getPhpPerUsd();
+
       return {
         methods: METHOD_CATALOG,
         currencies: [...CURRENCIES],
-        fx_php_per_usd: String(config.fxPhpPerUsd),
+        fx_php_per_usd: String(fxRate.php_per_usd),
+        fx_rate_source: fxRate.source,
+        fx_rate_locked_until: fxRate.locked_until,
         transaction_ttl_seconds: config.transactionTtlSeconds,
       };
     },
@@ -203,12 +218,13 @@ export function createPaymentService(input: {
         throw rpcError(grpcStatus.INVALID_ARGUMENT, "unsupported_currency");
       }
 
+      const fxRate = await fxRates.getPhpPerUsd();
       const plan = planCharge({
         method: request.method,
         currency: requestedCurrency,
         source_currency: transaction.currency,
         line_items: transaction.line_items,
-        phpPerUsd: config.fxPhpPerUsd,
+        phpPerUsd: fxRate.php_per_usd,
       });
 
       const invalid = validateChargePlan(plan);
@@ -247,6 +263,7 @@ export function createPaymentService(input: {
           amount: reusable.amount,
           provider_session_id: reusable.provider_session_id,
           reused: true,
+          fx_source: fxRate.source,
         });
 
         return {
@@ -318,6 +335,7 @@ export function createPaymentService(input: {
         currency: plan.currency,
         amount: plan.amount,
         reused: false,
+        fx_source: fxRate.source,
       });
 
       return {

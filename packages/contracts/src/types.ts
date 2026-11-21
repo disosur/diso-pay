@@ -4,8 +4,11 @@ export type Currency = (typeof CURRENCIES)[number];
 export const PAYMENT_METHODS = ["card", "gcash", "maya", "qrph"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-export const PROVIDERS = ["stripe", "payrex"] as const;
+export const PROVIDERS = ["stripe", "xendit"] as const;
 export type Provider = (typeof PROVIDERS)[number];
+
+export const FX_RATE_SOURCES = ["stripe", "static"] as const;
+export type FxRateSource = (typeof FX_RATE_SOURCES)[number];
 
 export const TRANSACTION_STATUSES = [
   "pending",
@@ -75,6 +78,8 @@ export type CheckoutOptions = {
   methods: MethodOption[];
   currencies: Currency[];
   fx_php_per_usd: string;
+  fx_rate_source: FxRateSource;
+  fx_rate_locked_until: number;
   transaction_ttl_seconds: number;
 };
 

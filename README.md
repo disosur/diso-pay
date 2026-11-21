@@ -16,7 +16,7 @@ merchant server
       ▲                             │ HTTPS
       │ redirect                    ▼
 ┌─────┴────────┐          ┌──────────────────┐
-│  customer    │          │ Stripe  / PayRex │
+│  customer    │          │ Stripe / Xendit  │
 │  checkout UI │          └──────────────────┘
 └──────────────┘
 ```
@@ -25,7 +25,7 @@ merchant server
   `POST /payment/process`, the hosted checkout page, and the provider return
   handler. Talks to the other services over gRPC.
 - **payment** (`apps/payment`) — the only service that holds provider keys and
-  talks to Stripe or PayRex. Also the only place that knows the
+  talks to Stripe or Xendit. Also the only place that knows the
   method → provider and currency rules.
 - **ledger** (`apps/ledger`) — append-only event store backed by SQLite through
   Drizzle. Transaction state is derived by folding the event log.
@@ -73,7 +73,7 @@ bun run build        # build the processor
 
 ## Creating a transaction
 
-`POST /payment/process` accepts a PayRex/Stripe-shaped body. Amounts are in
+`POST /payment/process` accepts a Stripe/Xendit-shaped body. Amounts are in
 minor units (cents), so `50000` is ₱500.00.
 
 | Field                   | Required | Notes                                                     |
@@ -137,14 +137,29 @@ theme) where the customer picks a method and currency.
 | Method          | Provider  | Currency                     |
 | --------------- | --------- | ---------------------------- |
 | `card`          | Stripe    | up to the customer: PHP or USD |
-| `gcash`         | PayRex    | PHP only                     |
-| `maya`          | PayRex    | PHP only                     |
-| `qrph`          | PayRex    | PHP only                     |
+| `gcash`         | Xendit    | PHP only                     |
+| `maya`          | Xendit    | PHP only                     |
+| `qrph`          | Xendit    | PHP only                     |
 
-PHP-only methods force PHP and convert the line items with
-`FX_PHP_PER_USD` (default `58`). The same conversion runs on the server, so the
-charged amount always matches what the page displayed. The amount is validated
-against each provider's minimum before a session is created.
+PHP-only methods force PHP and convert the line items with the current
+USD → PHP rate. The server derives the provider amount from the same cached
+quote, and validates it against each provider's minimum before a session is
+created.
+
+### FX rates
+
+When `STRIPE_SECRET_KEY` is set, the payment service fetches a USD → PHP rate
+from Stripe's [FX Quotes API](https://docs.stripe.com/payments/currencies/localize-prices/fx-quotes-api)
+and uses its `base_rate` (mid-market, without Stripe's FX fee). Quotes are
+cached for `FX_STRIPE_LOCK_DURATION` (`none`, `five_minutes`, `hour`, or `day`)
+and the checkout page shows the rate source and remaining lock time.
+
+The FX Quotes API is a Stripe preview feature: your Stripe account must have
+access to the `2026-09-30.preview` API version, and the API is only available in
+some merchant countries. When the quote cannot be fetched, the service logs a
+warning and falls back to `FX_PHP_PER_USD` until the next retry. Set
+`FX_STRIPE_LOCK_DURATION=none` to skip the paid lock duration; informational
+quotes still refresh automatically.
 
 The page calls `POST`-style server functions, which call the payment service. No
 provider keys or gRPC ports are reachable from the browser.
@@ -152,49 +167,57 @@ provider keys or gRPC ports are reachable from the browser.
 Pass `payment_method` when creating a transaction to lock the link to a single
 method. The checkout page then renders that method only, with no picker, and the
 payment service rejects any other method with `payment_method_not_allowed`. The
-chosen method is also forwarded to the provider (PayRex receives
-`payment_methods: ['gcash']` and therefore offers nothing else on its hosted
-page).
+chosen method is also forwarded to the provider (Xendit receives
+`allowed_payment_channels: ['GCASH']`, or `PAYMAYA` / `QRPH`, and therefore
+offers nothing else on its hosted page).
 
 ### Provider redirects
 
-Stripe and PayRex are given
+Stripe and Xendit are given
 `POST /payment/:id/return?outcome=success|cancel` as their return URLs. The
 handler appends a `checkout.returned` event and `302`s the customer to the
 merchant's `success_url` or `cancel_url`.
 
-> **Local development with PayRex:** PayRex rejects `localhost` and `127.0.0.1`
-> redirect URLs with `403`. When the configured return base is a loopback URL,
-> the payment service automatically falls back to the merchant's own
-> `success_url`/`cancel_url` for PayRex sessions (and logs a warning), so the
-> GCash/Maya/QR Ph flow still works locally — you just lose the
+> **Local development with Xendit:** Xendit requires `HTTPS` return URLs, so it
+> rejects `localhost` and `127.0.0.1`. When the configured return base is a
+> loopback URL, the payment service automatically falls back to the merchant's
+> own `success_url`/`cancel_url` for Xendit sessions (and logs a warning), so
+> the GCash/Maya/QR Ph flow still works locally — you just lose the
 > `checkout.returned` ledger event for those payments.
 >
 > To keep return tracking, expose the processor with a tunnel and set
-> `CHECKOUT_RETURN_BASE_URL=https://your-tunnel` in `apps/payment/.env`. LAN
-> addresses such as `http://192.168.1.5:3000` also work for PayRex.
+> `CHECKOUT_RETURN_BASE_URL=https://your-tunnel` in `apps/payment/.env`.
 
 ## Webhooks
 
-The payment service accepts provider webhooks and prints every payload to the
-console. Nothing is written to the ledger yet, so these endpoints are only for
-inspecting what Stripe and PayRex send.
+The payment service accepts provider webhooks, prints every payload to the
+console, and appends a `payment.succeeded` event when the provider confirms a
+completed payment. The fold in `packages/contracts` treats that event as
+terminal `completed`, so fulfilment can rely on it instead of the return
+redirect.
 
 | Provider | Endpoint                            | Signing secret          |
 | -------- | ----------------------------------- | ----------------------- |
 | Stripe   | `POST http://localhost:4012/webhooks/stripe` | `STRIPE_WEBHOOK_SECRET` |
-| PayRex   | `POST http://localhost:4012/webhooks/payrex` | `PAYREX_WEBHOOK_SECRET` |
+| Xendit   | `POST http://localhost:4012/webhooks/xendit` | `XENDIT_WEBHOOK_TOKEN`  |
 
-Signatures are verified before a payload is logged:
+Webhooks are authenticated before a payload is logged:
 
 - Stripe uses `Stripe-Signature` with a 5 minute tolerance.
-- PayRex uses `Payrex-Signature` (`t`, `te`, `li`) with a 5 minute tolerance.
-  The signature covers the raw body, so the service reads the body as text and
-  never parses it first.
+- Xendit sends a static verification token in the `x-callback-token` header.
+  The service compares it to `XENDIT_WEBHOOK_TOKEN` in constant time.
 
 If a secret is not set, the service logs a warning and accepts the payload
-without verification. Requests with a bad signature get `400`, which tells the
-provider to retry; valid ones get `200`.
+without verification. Requests with a bad signature get `400`. Verified events
+that cannot be written to the ledger get `502` so the provider retries; anything
+else gets `200`.
+
+`payment.succeeded` is recorded for Stripe `checkout.session.completed` /
+`checkout.session.async_payment_succeeded` and Xendit
+`payment_session.completed`. The transaction is resolved from
+`metadata.transaction_id`, falling back to `reference_id` / `client_reference_id`
+(when it is a transaction id, or through `FindActiveTransaction` for a merchant
+reference). Replays are deduped by provider session id.
 
 Local Stripe:
 
@@ -203,10 +226,10 @@ stripe listen --forward-to localhost:4012/webhooks/stripe
 # copy the whsec_… it prints into apps/payment/.env
 ```
 
-PayRex requires a public HTTPS URL, so expose the payment service with a tunnel
-and register `https://your-tunnel/webhooks/payrex` in the PayRex dashboard for
-the events you want (`payment_intent.succeeded`, `checkout_session.expired`, …).
-The webhook's `secret_key` (`whsk_…`) goes in `PAYREX_WEBHOOK_SECRET`.
+Xendit requires a public HTTPS URL, so expose the payment service with a tunnel
+and register `https://your-tunnel/webhooks/xendit` in the Xendit dashboard under
+webhook settings. Copy the callback verification token from that page into
+`XENDIT_WEBHOOK_TOKEN`.
 
 ## Ledger
 
@@ -219,6 +242,7 @@ computed by folding its events in order; nothing is ever updated in place.
 | `checkout.session_created` | payment    | provider session + hosted URL        |
 | `checkout.session_reused`  | payment    | an existing live session was reused  |
 | `checkout.returned`        | processor  | provider sent the customer back      |
+| `payment.succeeded`        | payment    | provider confirmed the payment       |
 
 Derived status: `pending` → `awaiting_payment` → `completed`, or `expired`
 once the deadline passes. Each append can carry an `idempotency_key`; replays
@@ -284,12 +308,14 @@ LEDGER_GRPC_ADDRESS=127.0.0.1:50051
 PROCESSOR_PUBLIC_URL=http://localhost:3000
 CHECKOUT_RETURN_BASE_URL=
 FX_PHP_PER_USD=58
+FX_STRIPE_LOCK_DURATION=hour
 TRANSACTION_TTL_SECONDS=1800
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
-PAYREX_SECRET_API_KEY=
-PAYREX_WEBHOOK_SECRET=
-PAYREX_API_BASE_URL=https://api.payrexhq.com
+STRIPE_API_BASE_URL=https://api.stripe.com
+XENDIT_SECRET_API_KEY=
+XENDIT_WEBHOOK_TOKEN=
+XENDIT_API_BASE_URL=https://api.xendit.co
 ```
 
 `apps/ledger/.env`
@@ -313,9 +339,8 @@ TRANSACTION_TTL_SECONDS=1800
 
 ## Not included yet
 
-The provider return redirect is a UX signal, not proof of payment. The webhook
-endpoints currently only log payloads; they should append the authoritative
-`payment.succeeded` event before this is used for fulfilment.
+The provider return redirect is a UX signal, not proof of payment. Use the
+webhook-recorded `payment.succeeded` event for fulfilment.
 
 `POST /payment/process` is intentionally unauthenticated so the checkout page
 can be opened by anyone holding the link. Put merchant authentication (an API

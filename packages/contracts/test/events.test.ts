@@ -7,9 +7,11 @@ import {
   foldTransaction,
   isTransactionActive,
   parseCreatedPayload,
+  PAYMENT_SUCCEEDED,
   TRANSACTION_CREATED,
   type CreatedPayload,
   type LedgerEvent,
+  type PaymentSucceededPayload,
   type SessionPayload,
 } from "../src/index.ts";
 
@@ -27,7 +29,7 @@ const created: CreatedPayload = {
 };
 
 const session: SessionPayload = {
-  provider: "payrex",
+  provider: "xendit",
   method: "gcash",
   currency: "PHP",
   amount: 50_000,
@@ -105,7 +107,7 @@ describe("foldTransaction", () => {
         event(
           3,
           CHECKOUT_RETURNED,
-          { outcome: "success", provider: "payrex", method: "gcash" },
+          { outcome: "success", provider: "xendit", method: "gcash" },
           NOW + 2_000,
         ),
       ],
@@ -117,6 +119,54 @@ describe("foldTransaction", () => {
     expect(isTransactionActive(transaction!, NOW + 3_000)).toBe(false);
   });
 
+  test("completes when the provider reports a successful payment", () => {
+    const payment: PaymentSucceededPayload = {
+      provider: "xendit",
+      provider_session_id: "ps_test_1",
+      amount: 50_000,
+      currency: "PHP",
+      reference: "order_1",
+    };
+
+    const transaction = foldTransaction(
+      [
+        event(1, TRANSACTION_CREATED, created),
+        event(2, CHECKOUT_SESSION_CREATED, session, NOW + 1_000),
+        event(3, PAYMENT_SUCCEEDED, payment, NOW + 2_000),
+      ],
+      NOW + 3_000,
+    );
+
+    expect(transaction?.status).toBe("completed");
+    expect(transaction?.last_outcome).toBe("success");
+    expect(isTransactionActive(transaction!, NOW + 3_000)).toBe(false);
+  });
+
+  test("keeps a reported payment terminal when a later cancel returns", () => {
+    const payment: PaymentSucceededPayload = {
+      provider: "stripe",
+      provider_session_id: "cs_test_1",
+    };
+
+    const transaction = foldTransaction(
+      [
+        event(1, TRANSACTION_CREATED, created),
+        event(2, CHECKOUT_SESSION_CREATED, session, NOW + 1_000),
+        event(3, PAYMENT_SUCCEEDED, payment, NOW + 2_000),
+        event(
+          4,
+          CHECKOUT_RETURNED,
+          { outcome: "cancel", provider: "stripe", method: "card" },
+          NOW + 3_000,
+        ),
+      ],
+      NOW + 4_000,
+    );
+
+    expect(transaction?.status).toBe("completed");
+    expect(transaction?.last_outcome).toBe("success");
+  });
+
   test("keeps a success terminal when a later cancel returns", () => {
     const transaction = foldTransaction(
       [
@@ -125,13 +175,13 @@ describe("foldTransaction", () => {
         event(
           3,
           CHECKOUT_RETURNED,
-          { outcome: "success", provider: "payrex", method: "gcash" },
+          { outcome: "success", provider: "xendit", method: "gcash" },
           NOW + 2_000,
         ),
         event(
           4,
           CHECKOUT_RETURNED,
-          { outcome: "cancel", provider: "payrex", method: "gcash" },
+          { outcome: "cancel", provider: "xendit", method: "gcash" },
           NOW + 3_000,
         ),
       ],

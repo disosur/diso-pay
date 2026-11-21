@@ -14,6 +14,7 @@ export const TRANSACTION_CREATED = "transaction.created";
 export const CHECKOUT_SESSION_CREATED = "checkout.session_created";
 export const CHECKOUT_SESSION_REUSED = "checkout.session_reused";
 export const CHECKOUT_RETURNED = "checkout.returned";
+export const PAYMENT_SUCCEEDED = "payment.succeeded";
 
 export type CreatedPayload = {
   currency: Currency;
@@ -43,6 +44,15 @@ export type ReturnedPayload = {
   outcome: "success" | "cancel";
   provider: string;
   method: string;
+};
+
+export type PaymentSucceededPayload = {
+  provider: Provider;
+  provider_session_id: string;
+  amount?: number;
+  currency?: Currency;
+  reference?: string;
+  event_id?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -164,6 +174,14 @@ export function foldTransaction(
         ...session,
         created_at: existing?.created_at ?? event.created_at,
       });
+      continue;
+    }
+
+    if (event.type === PAYMENT_SUCCEEDED) {
+      const succeeded = parsePayload<PaymentSucceededPayload>(event.payload_json);
+      if (!succeeded) continue;
+
+      lastOutcome = "success";
       continue;
     }
 

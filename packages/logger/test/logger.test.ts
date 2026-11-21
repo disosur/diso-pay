@@ -149,11 +149,11 @@ describe("child bindings", () => {
     const log = createLogger({ service: "payment", level: "debug", format: "json" });
     const child = log.child({ transaction_id: "txn_1", provider: "stripe" });
 
-    child.info("session", { provider: "payrex", amount: 100 });
+    child.info("session", { provider: "xendit", amount: 100 });
 
     const record = JSON.parse(out.lines()[0]!);
     expect(record.transaction_id).toBe("txn_1");
-    expect(record.provider).toBe("payrex");
+    expect(record.provider).toBe("xendit");
     expect(record.amount).toBe(100);
   });
 });

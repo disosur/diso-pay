@@ -48,7 +48,7 @@ describe("planCharge", () => {
     expect(plan.amount).toBe(50_000);
   });
 
-  test("forces PHP wallets onto PayRex in PHP", () => {
+  test("forces PHP wallets onto Xendit in PHP", () => {
     for (const method of ["gcash", "maya", "qrph"] as const) {
       const plan = planCharge({
         method,
@@ -58,7 +58,7 @@ describe("planCharge", () => {
         phpPerUsd: 58,
       });
 
-      expect(plan.provider).toBe("payrex");
+      expect(plan.provider).toBe("xendit");
       expect(plan.currency).toBe("PHP");
       expect(plan.amount).toBe(116_000);
     }
@@ -78,16 +78,16 @@ describe("planCharge", () => {
 });
 
 describe("validateChargePlan", () => {
-  test("enforces PayRex's PHP minimum", () => {
+  test("enforces Xendit's PHP minimum", () => {
     const plan = planCharge({
       method: "gcash",
       currency: "PHP",
       source_currency: "PHP",
-      line_items: [{ name: "Item", amount: 1_000, quantity: 1 }],
+      line_items: [{ name: "Item", amount: 50, quantity: 1 }],
       phpPerUsd: 58,
     });
 
-    expect(validateChargePlan(plan)).toBe("amount_below_minimum:PHP:2000");
+    expect(validateChargePlan(plan)).toBe("amount_below_minimum:PHP:100");
   });
 
   test("accepts valid amounts", () => {

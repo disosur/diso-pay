@@ -1,10 +1,12 @@
 import {
+  DEFAULT_PHP_PER_USD,
   formatAmount,
   isPhpOnlyMethod,
   planCharge,
   validateChargePlan,
   type CheckoutOptions,
   type Currency,
+  type LineItem,
   type MethodOption,
   type PaymentMethod,
 } from "@diso-pay/contracts";
@@ -12,6 +14,7 @@ import {
   CreditCard,
   Loader2,
   Lock,
+  Package,
   QrCode,
   Smartphone,
   Wallet,
@@ -36,7 +39,7 @@ const METHOD_ICONS = {
 
 const PROVIDER_LABELS = {
   stripe: "Stripe",
-  payrex: "PayRex",
+  xendit: "Xendit",
 } as const;
 
 function MethodDetails({ option }: { option: MethodOption }) {
@@ -64,6 +67,44 @@ function formatRemaining(ms: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function ProductRow({ item, currency }: { item: LineItem; currency: Currency }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const image = item.image;
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="size-12 shrink-0 overflow-hidden rounded-lg border bg-muted">
+        {image && !imageFailed ? (
+          <img
+            src={image}
+            alt={item.name}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+            className="size-full object-cover"
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <Package className="size-5" />
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">
+          {item.name}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {formatAmount(item.amount, currency)} × {item.quantity}
+        </p>
+      </div>
+
+      <span className="shrink-0 text-sm font-medium tabular-nums">
+        {formatAmount(item.amount * item.quantity, currency)}
+      </span>
+    </div>
+  );
+}
+
 export function CheckoutForm({
   transaction,
   options,
@@ -89,7 +130,12 @@ export function CheckoutForm({
     return () => clearInterval(timer);
   }, []);
 
-  const rate = Number(options.fx_php_per_usd) || 58;
+  const rate = Number(options.fx_php_per_usd) || DEFAULT_PHP_PER_USD;
+  const liveRate = options.fx_rate_source === "stripe";
+  const rateLockMinutes =
+    liveRate && now !== null && options.fx_rate_locked_until > now
+      ? Math.max(1, Math.ceil((options.fx_rate_locked_until - now) / 60_000))
+      : null;
   const phpOnly = isPhpOnlyMethod(method);
   const effectiveCurrency: Currency = phpOnly ? "PHP" : currency;
 
@@ -109,10 +155,16 @@ export function CheckoutForm({
   const remainingMs = now === null ? null : transaction.expires_at - now;
   const expired = remainingMs !== null && remainingMs <= 0;
   const converted = plan.currency !== transaction.currency;
+  const rateExpired =
+    converted &&
+    liveRate &&
+    now !== null &&
+    options.fx_rate_locked_until > 0 &&
+    now >= options.fx_rate_locked_until;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting || expired || validation) return;
+    if (submitting || expired || rateExpired || validation) return;
 
     setSubmitting(true);
     setError(null);
@@ -233,23 +285,18 @@ export function CheckoutForm({
       </div>
 
       <div className="rounded-lg border bg-background/40">
-        <div className="space-y-2 p-4">
-          {plan.line_items.map((item, index) => (
-            <div
-              key={`${item.name}-${index}`}
-              className="flex items-baseline justify-between gap-3 text-sm"
-            >
-              <span className="min-w-0 truncate text-muted-foreground">
-                {item.name}
-                {item.quantity > 1 ? ` × ${item.quantity}` : ""}
-              </span>
-              <span className="shrink-0 tabular-nums">
-                {formatAmount(item.amount * item.quantity, plan.currency)}
-              </span>
-            </div>
-          ))}
+        <div className="space-y-4 p-4">
+          <div className="space-y-4">
+            {plan.line_items.map((item, index) => (
+              <ProductRow
+                key={`${item.name}-${index}`}
+                item={item}
+                currency={plan.currency}
+              />
+            ))}
+          </div>
 
-          <Separator className="my-3" />
+          <Separator />
 
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-sm font-medium">Total</span>
@@ -260,7 +307,18 @@ export function CheckoutForm({
 
           {converted ? (
             <p className="text-xs text-muted-foreground">
-              Converted from {transaction.currency} at 1 USD = {rate} PHP.
+              Converted from {transaction.currency} at 1 USD ={" "}
+              {rate.toFixed(2)} PHP
+              {liveRate
+                ? options.fx_rate_locked_until > 0
+                  ? rateExpired
+                    ? " · rate quote expired, reload to refresh"
+                    : rateLockMinutes
+                      ? ` · live rate, locked for ${rateLockMinutes}m`
+                      : " · live rate"
+                  : " · live rate"
+                : ""}
+              .
             </p>
           ) : null}
         </div>
@@ -268,6 +326,13 @@ export function CheckoutForm({
 
       {validation ? (
         <Alert variant="destructive">{describeCheckoutError(new Error(validation))}</Alert>
+      ) : null}
+
+      {rateExpired ? (
+        <Alert variant="destructive">
+          The exchange rate quote for this total expired. Reload the page to see
+          the latest price.
+        </Alert>
       ) : null}
 
       {error ? <Alert variant="destructive">{error}</Alert> : null}
@@ -283,7 +348,7 @@ export function CheckoutForm({
           type="submit"
           size="lg"
           className="w-full"
-          disabled={submitting || expired || Boolean(validation)}
+          disabled={submitting || expired || rateExpired || Boolean(validation)}
         >
           {submitting ? (
             <>

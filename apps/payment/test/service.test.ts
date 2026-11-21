@@ -21,12 +21,14 @@ const config: PaymentConfig = {
   processorPublicUrl: "http://localhost:3000",
   checkoutReturnBaseUrl: "",
   fxPhpPerUsd: 58,
+  fxStripeLockDuration: "hour",
   transactionTtlSeconds: 1_800,
   stripeSecretKey: "",
   stripeWebhookSecret: "",
-  payrexSecretKey: "sk_test",
-  payrexWebhookSecret: "",
-  payrexApiBaseUrl: "https://api.payrexhq.com",
+  stripeApiBaseUrl: "https://api.stripe.com",
+  xenditSecretKey: "xnd_development_test",
+  xenditWebhookToken: "",
+  xenditApiBaseUrl: "https://api.xendit.co",
 };
 
 function lockedTransaction(payment_method: "gcash" | "card"): Transaction {
@@ -79,5 +81,30 @@ describe("createCheckoutSession payment method lock", () => {
       code: status.INVALID_ARGUMENT,
       message: "payment_method_not_allowed:gcash",
     });
+  });
+});
+
+describe("getCheckoutOptions", () => {
+  test("returns the current FX quote", async () => {
+    const lockedUntil = NOW + 3_600_000;
+    const service = createPaymentService({
+      config,
+      ledger: {} as LedgerClient,
+      providers: {} as ProviderRegistry,
+      fxRates: {
+        getPhpPerUsd: async () => ({
+          php_per_usd: 59.25,
+          source: "stripe",
+          quote_id: "fxq_test_1",
+          locked_until: lockedUntil,
+        }),
+      },
+    });
+
+    const options = await service.getCheckoutOptions();
+
+    expect(options.fx_php_per_usd).toBe("59.25");
+    expect(options.fx_rate_source).toBe("stripe");
+    expect(options.fx_rate_locked_until).toBe(lockedUntil);
   });
 });

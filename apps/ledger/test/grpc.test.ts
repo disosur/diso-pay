@@ -79,7 +79,7 @@ test("ledger gRPC round trip", async () => {
       transaction_id: TRANSACTION_ID,
       type: CHECKOUT_SESSION_CREATED,
       payload_json: JSON.stringify({
-        provider: "payrex",
+        provider: "xendit",
         method: "gcash",
         currency: "PHP",
         amount: 50_000,

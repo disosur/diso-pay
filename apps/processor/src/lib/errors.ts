@@ -24,7 +24,7 @@ export function describeCheckoutError(error: unknown): string {
     if (code === prefix) return message;
   }
 
-  if (code.startsWith("stripe_") || code.startsWith("payrex_")) {
+  if (code.startsWith("stripe_") || code.startsWith("xendit_")) {
     if (code.includes("unavailable") || code.includes("unreachable")) {
       return "The payment provider is temporarily unavailable. Try again shortly.";
     }

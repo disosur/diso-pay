@@ -18,21 +18,21 @@ export const METHOD_CATALOG: MethodOption[] = [
   {
     id: "gcash",
     label: "GCash",
-    provider: "payrex",
+    provider: "xendit",
     php_only: true,
     description: "Pay with a GCash wallet.",
   },
   {
     id: "maya",
     label: "Maya",
-    provider: "payrex",
+    provider: "xendit",
     php_only: true,
     description: "Pay with a Maya account.",
   },
   {
     id: "qrph",
     label: "QR Ph",
-    provider: "payrex",
+    provider: "xendit",
     php_only: true,
     description: "Scan a QR Ph code with any participating bank app.",
   },
@@ -44,7 +44,7 @@ const CATALOG_BY_METHOD = new Map<PaymentMethod, MethodOption>(
 
 export const MINIMUM_CHARGE: Record<Provider, Partial<Record<Currency, number>>> = {
   stripe: { USD: 50, PHP: 2000 },
-  payrex: { PHP: 2000 },
+  xendit: { PHP: 100 },
 };
 
 export function providerForMethod(method: PaymentMethod): Provider {

@@ -50,7 +50,7 @@ function Home() {
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
           The processor service creates a transaction, hands back a hosted
-          checkout link, and routes the customer to Stripe or PayRex depending
+          checkout link, and routes the customer to Stripe or Xendit depending
           on the method they pick. Every lifecycle step is appended to the
           ledger.
         </p>
@@ -80,7 +80,7 @@ function Home() {
             <Layers className="size-5 text-muted-foreground" />
             <CardTitle className="text-sm">QR Ph</CardTitle>
             <CardDescription className="text-xs leading-relaxed">
-              Bank-app QR payments through PayRex.
+              Bank-app QR payments through Xendit.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -138,7 +138,7 @@ function Home() {
             "The merchant calls /payment/process with line items and return URLs.",
             "The processor writes a transaction.created event to the ledger and returns a hosted checkout link.",
             "The customer picks a currency and method on the checkout page.",
-            "The payment service creates the provider session (Stripe for cards, PayRex for PHP wallets and QR Ph).",
+            "The payment service creates the provider session (Stripe for cards, Xendit for PHP wallets and QR Ph).",
             "Provider redirects come back through the processor, are appended to the ledger, and forward to the merchant.",
           ].map((step, index) => (
             <li key={step} className="flex gap-3">

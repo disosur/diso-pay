@@ -1,15 +1,37 @@
 import { Hono } from "hono";
 import Stripe from "stripe";
+import {
+  PAYMENT_SUCCEEDED,
+  type LedgerClient,
+  type PaymentSucceededPayload,
+  type Provider,
+} from "@diso-pay/contracts";
 import type { PaymentConfig } from "./config.ts";
 import { log } from "./logger.ts";
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
 
-type PayrexEvent = {
-  id?: string;
-  type?: string;
-  livemode?: boolean;
-  data?: { resource?: Record<string, unknown> };
+const STRIPE_SUCCESS_EVENTS = new Set([
+  "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+]);
+
+export type WebhookLedger = Pick<LedgerClient, "AppendEvent" | "FindActiveTransaction">;
+
+type PaymentSignal = {
+  transactionId?: string;
+  reference?: string;
+  providerSessionId?: string;
+  amount?: number;
+  currency?: string;
+  eventId?: string;
+};
+
+type XenditEvent = {
+  event?: string;
+  business_id?: string;
+  created?: string;
+  data?: Record<string, unknown>;
 };
 
 type StripeEvent = {
@@ -35,20 +57,136 @@ function logWebhookPayload(provider: string, verified: boolean, payload: unknown
   console.log(JSON.stringify(payload, null, 2));
 }
 
-async function hmacSha256Hex(secret: string, payload: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
 
-  return [...new Uint8Array(signature)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function stripeSuccessSignal(
+  event: StripeEvent,
+  payload: Record<string, unknown>,
+): PaymentSignal | null {
+  if (typeof event.type !== "string" || !STRIPE_SUCCESS_EVENTS.has(event.type)) {
+    return null;
+  }
+
+  const data = isRecord(payload.data) ? payload.data : {};
+  const object = isRecord(data.object) ? data.object : {};
+  const metadata = isRecord(object.metadata) ? object.metadata : {};
+
+  return {
+    transactionId: stringValue(metadata.transaction_id),
+    reference: stringValue(object.client_reference_id),
+    providerSessionId: stringValue(object.id),
+    amount: numberValue(object.amount_total),
+    currency: stringValue(object.currency),
+    eventId: event.id,
+  };
+}
+
+function xenditSuccessSignal(
+  event: XenditEvent,
+  payload: Record<string, unknown>,
+): PaymentSignal | null {
+  if (event.event !== "payment_session.completed") return null;
+
+  const data = isRecord(payload.data) ? payload.data : {};
+  const metadata = isRecord(data.metadata) ? data.metadata : {};
+
+  return {
+    transactionId: stringValue(metadata.transaction_id),
+    reference: stringValue(data.reference_id),
+    providerSessionId: stringValue(data.payment_session_id),
+    amount: numberValue(data.amount),
+    currency: stringValue(data.currency),
+  };
+}
+
+async function resolveTransactionId(
+  ledger: WebhookLedger,
+  signal: PaymentSignal,
+): Promise<string | null> {
+  if (signal.transactionId) return signal.transactionId;
+
+  const reference = signal.reference;
+  if (!reference) return null;
+
+  if (reference.startsWith("txn_")) return reference;
+
+  const response = await ledger.FindActiveTransaction({ reference });
+  return response.transaction?.id ?? null;
+}
+
+async function recordPaymentSucceeded(
+  ledger: WebhookLedger,
+  provider: Provider,
+  signal: PaymentSignal,
+): Promise<"recorded" | "duplicate" | "not_found" | "failed"> {
+  let transactionId: string | null;
+  try {
+    transactionId = await resolveTransactionId(ledger, signal);
+  } catch (error) {
+    log.error("payment transaction lookup failed", {
+      provider,
+      reference: signal.reference,
+      err: error,
+    });
+    return "failed";
+  }
+
+  if (!transactionId) {
+    log.warn("payment succeeded without matching transaction", {
+      provider,
+      provider_session_id: signal.providerSessionId,
+      reference: signal.reference,
+    });
+    return "not_found";
+  }
+
+  const payload: PaymentSucceededPayload = {
+    provider,
+    provider_session_id: signal.providerSessionId ?? "",
+    ...(signal.amount !== undefined ? { amount: signal.amount } : {}),
+    ...(signal.currency
+      ? { currency: signal.currency as PaymentSucceededPayload["currency"] }
+      : {}),
+    ...(signal.reference ? { reference: signal.reference } : {}),
+    ...(signal.eventId ? { event_id: signal.eventId } : {}),
+  };
+
+  const dedupeKey =
+    signal.providerSessionId ?? signal.eventId ?? transactionId;
+
+  try {
+    const result = await ledger.AppendEvent({
+      transaction_id: transactionId,
+      type: PAYMENT_SUCCEEDED,
+      payload_json: JSON.stringify(payload),
+      idempotency_key: `payment.succeeded:${provider}:${dedupeKey}`,
+    });
+
+    log.info("payment succeeded recorded", {
+      provider,
+      transaction_id: transactionId,
+      provider_session_id: signal.providerSessionId,
+      amount: signal.amount,
+      currency: signal.currency,
+      duplicate: result.duplicate,
+    });
+
+    return result.duplicate ? "duplicate" : "recorded";
+  } catch (error) {
+    log.error("payment succeeded append failed", {
+      provider,
+      transaction_id: transactionId,
+      provider_session_id: signal.providerSessionId,
+      err: error,
+    });
+    return "failed";
+  }
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
@@ -60,61 +198,6 @@ function constantTimeEqual(left: string, right: string): boolean {
   }
 
   return diff === 0;
-}
-
-export type PayrexSignature = {
-  timestamp: number;
-  test: string;
-  live: string;
-};
-
-export function parsePayrexSignature(header: string): PayrexSignature | null {
-  const parts = new Map<string, string>();
-
-  for (const segment of header.split(",")) {
-    const separator = segment.indexOf("=");
-    if (separator === -1) continue;
-
-    parts.set(
-      segment.slice(0, separator).trim(),
-      segment.slice(separator + 1).trim(),
-    );
-  }
-
-  const timestamp = Number(parts.get("t"));
-  const test = parts.get("te");
-  const live = parts.get("li");
-
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
-  if (!test && !live) return null;
-
-  return { timestamp, test: test ?? "", live: live ?? "" };
-}
-
-export async function verifyPayrexSignature(input: {
-  rawBody: string;
-  header: string;
-  secret: string;
-  now?: number;
-  toleranceSeconds?: number;
-}): Promise<boolean> {
-  const signature = parsePayrexSignature(input.header);
-  if (!signature) return false;
-
-  const now = input.now ?? Date.now();
-  const tolerance = input.toleranceSeconds ?? SIGNATURE_TOLERANCE_SECONDS;
-
-  if (Math.abs(now / 1000 - signature.timestamp) > tolerance) return false;
-
-  const expected = await hmacSha256Hex(
-    input.secret,
-    `${signature.timestamp}.${input.rawBody}`,
-  );
-
-  return [signature.test, signature.live].some(
-    (candidate) =>
-      candidate.length > 0 && constantTimeEqual(candidate.toLowerCase(), expected),
-  );
 }
 
 let stripeVerifier: Stripe | undefined;
@@ -148,7 +231,7 @@ export async function verifyStripeSignature(input: {
   );
 }
 
-export function createWebhookRoutes(config: PaymentConfig): Hono {
+export function createWebhookRoutes(config: PaymentConfig, ledger: WebhookLedger): Hono {
   const app = new Hono();
 
   app.post("/webhooks/stripe", async (c) => {
@@ -204,56 +287,73 @@ export function createWebhookRoutes(config: PaymentConfig): Hono {
     });
     logWebhookPayload("stripe", true, payload);
 
+    const signal = stripeSuccessSignal(event, payload);
+    if (signal) {
+      const outcome = await recordPaymentSucceeded(ledger, "stripe", signal);
+      if (outcome === "failed") {
+        return c.json({ error: "ledger_append_failed" }, 502);
+      }
+    }
+
     return c.json({ received: true });
   });
 
-  app.post("/webhooks/payrex", async (c) => {
+  app.post("/webhooks/xendit", async (c) => {
     const rawBody = await c.req.text();
-    const signature = c.req.header("payrex-signature") ?? "";
+    const token = c.req.header("x-callback-token") ?? "";
     const payload = parseJson(rawBody);
 
     if (!isRecord(payload)) {
-      log.warn("payrex webhook rejected", { code: "invalid_json" });
+      log.warn("xendit webhook rejected", { code: "invalid_json" });
       return c.json({ error: "invalid_json" }, 400);
     }
 
-    const event = payload as PayrexEvent;
+    const event = payload as XenditEvent;
+    const data = isRecord(event.data) ? event.data : {};
     const summary = {
-      provider: "payrex",
-      event_id: event.id,
-      type: event.type,
-      livemode: event.livemode,
+      provider: "xendit",
+      event: event.event,
+      payment_session_id:
+        typeof data.payment_session_id === "string"
+          ? data.payment_session_id
+          : undefined,
+      status: typeof data.status === "string" ? data.status : undefined,
+      reference_id:
+        typeof data.reference_id === "string" ? data.reference_id : undefined,
     };
 
-    if (config.payrexWebhookSecret.length === 0) {
-      log.warn("payrex webhook secret missing", { ...summary, verified: false });
-      logWebhookPayload("payrex", false, payload);
+    if (config.xenditWebhookToken.length === 0) {
+      log.warn("xendit webhook token missing", { ...summary, verified: false });
+      logWebhookPayload("xendit", false, payload);
       return c.json({ received: true, verified: false });
     }
 
-    if (signature.length === 0) {
-      log.warn("payrex webhook rejected", { ...summary, code: "missing_signature" });
+    if (token.length === 0) {
+      log.warn("xendit webhook rejected", { ...summary, code: "missing_signature" });
       return c.json({ error: "missing_signature" }, 400);
     }
 
-    const valid = await verifyPayrexSignature({
-      rawBody,
-      header: signature,
-      secret: config.payrexWebhookSecret,
-    });
-
-    if (!valid) {
-      log.warn("payrex webhook rejected", { ...summary, code: "invalid_signature" });
+    if (!constantTimeEqual(token, config.xenditWebhookToken)) {
+      log.warn("xendit webhook rejected", { ...summary, code: "invalid_signature" });
       return c.json({ error: "invalid_signature" }, 400);
     }
 
-    log.info("payrex webhook received", {
-      event_id: event.id,
-      type: event.type,
-      livemode: event.livemode,
+    log.info("xendit webhook received", {
+      event: event.event,
+      payment_session_id: summary.payment_session_id,
+      status: summary.status,
+      reference_id: summary.reference_id,
       verified: true,
     });
-    logWebhookPayload("payrex", true, payload);
+    logWebhookPayload("xendit", true, payload);
+
+    const signal = xenditSuccessSignal(event, payload);
+    if (signal) {
+      const outcome = await recordPaymentSucceeded(ledger, "xendit", signal);
+      if (outcome === "failed") {
+        return c.json({ error: "ledger_append_failed" }, 502);
+      }
+    }
 
     return c.json({ received: true });
   });
